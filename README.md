@@ -36,3 +36,64 @@ fred();       // I am Fred
 susan();      // I am Susan
 ```
 
+## Composing Functions
+###### Output to Input
+
+Example:
+```
+function words(str) {
+  return String(str)
+    .toLowerCase()
+    .split( /\s|\b/ )
+    .filter(function alpha(v) {
+      return /^[\w]+$/.test(v);
+    );
+}
+
+function unique(list) {
+  var uniqList = [];
+  for (let v of list) {
+    if (uniqList.indexOf(v) === -1) {
+      uniqList.push(v);
+    }
+  }
+  return uniqList;
+}
+
+var text = "To compose two functions together, pass the \ output of the first function call as the input of the \ second function call.";
+var wordsUsed = unique(words(text));
+// ["to","compose","two","functions","together","pass",
+// "the","output","of","first","function","call","as",
+// "input","second"]
+```
+
+###### General Composition
+
+Example:
+```
+function compose(...fns) {
+  return function composed(result) {
+    var list = [...fns];
+    while (list.length > 0) {
+      result = list.pop()(result);
+    }
+    return result;
+  };
+}
+
+function skipShortWords(words) {
+  var filteredWords = [];
+  for (let word of words) {
+    if (word.length > 4) {
+      filteredWords.push( word );
+    }
+  }
+  return filteredWords;
+}
+
+var biggerWords = compose(skipShortWords, unique, words);
+var wordsUsed = biggerWords( text );
+// ["compose","functions","together","output","first",
+// "function","input","second"]
+```
+
