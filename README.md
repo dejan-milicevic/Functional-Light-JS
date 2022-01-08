@@ -1,5 +1,54 @@
 # Why Functional Programming?
 
+```
+var numbers = [4,10,0,27,42,17,15,-6,58];
+var faves = [];
+var magicNumber = 0;
+
+pickFavoriteNumbers();
+calculateMagicNumber();
+outputMsg();      // The magic number is: 42
+
+function calculateMagicNumber() {
+  for (let fave of faves) {
+    magicNumber = magicNumber + fave;
+  }
+}
+function pickFavoriteNumbers() {
+  for (let num of numbers) {
+    if (num >= 10 && num <= 20) {
+      faves.push( num );
+    }
+  }
+}
+function outputMsg() {
+  var msg = `The magic number is: ${magicNumber}`;
+  console.log(msg);
+}
+```
+vs.
+```
+var sumOnlyFavorites = FP.compose([
+  FP.filterReducer(FP.gte(10)),
+  FP.filterReducer(FP.lte(20))
+])(sum);
+var printMagicNumber = FP.pipe([
+  FP.reduce(sumOnlyFavorites, 0),
+  constructMsg,
+  console.log
+]);
+var numbers = [4,10,0,27,42,17,15,-6,58];
+
+printMagicNumber(numbers);      // The magic number is: 42
+
+function sum(x, y) {
+  return x + y;
+}
+function constructMsg(v) {
+  return `The magic number is: ${v}`;
+}
+```
+
 # The Nature of Functions
 
 ## Functions of Functions
@@ -39,7 +88,176 @@ susan();      // I am Susan
 
 # Managing Function Inputs
 
+## All for One
+
+Imagine you’re passing a function to a utility, where the utility will send multiple arguments to that function. But you may only want the function to receive a single argument.
+
+```
+function unary(fn) {
+  return function onlyOneArg(arg) {
+    return fn(arg);
+  };
+}
+
+["1","2","3"].map(unary(parseInt));
+```
+
+## One on One
+
+```
+function identity(v) {
+  return v;
+}
+
+var words = " Now is the time for all... ".split( /\s|\b/ );
+words;      // ["","Now","is","the","time","for","all","...",""]
+words.filter( identity );      // ["Now","is","the","time","for","all","..."]
+```
+
+Because identity(..) simply returns the value passed to it, JS coerces each value into either true or false, and that determines whether to keep or exclude each value in the final array.
+
+## Unchanging One
+
+Certain APIs don’t let you pass a value directly into a method, but require you to pass in a function, even if that function literally just returns the value. One such API is the then(..) method on JS Promises:
+
+```
+// doesn't work:
+p1.then(foo).then(p2).then(bar);
+// instead:
+p1.then(foo).then(function(){ return p2; }).then(bar);
+
+function constant(v) {
+  return function value() {
+    return v;
+  };
+}
+
+p1.then(foo).then(constant(p2)).then(bar);
+```
+
+## Adapting Arguments to Parameters
+
+```
+function foo(x, y) {
+  console.log(x + y);
+}
+function bar(fn) {
+  fn([3, 9]);
+}
+bar(foo)      // fails
+```
+
+We can define a helper to adapt a function so that it spreads out a single received array as its individual arguments:
+
+```
+function spreadArgs(fn) {
+  return function spreadFn(argsArr) {
+    return fn(...argsArr);
+  };
+}
+bar(spreadArgs(foo));      // 12
+```
+
+While we’re talking about a spreadArgs(..) utility, let’s also define a utility to handle the opposite action:
+
+```
+function gatherArgs(fn) {
+  return function gatheredFn(...argsArr) {
+    return fn(argsArr);
+  };
+}
+
+function combineFirstTwo([v1, v2]) {
+  return v1 + v2;
+}
+[1,2,3,4,5].reduce(gatherArgs(combineFirstTwo));      // 15
+```
+
+## Some Now, Some Later
+
+If a function takes multiple arguments, you may want to specify some of those up front and leave the rest to be specified later.
+
+```
+function partial(fn, ...presetArgs) {
+  return function partiallyApplied(...laterArgs) {
+    return fn(...presetArgs, ...laterArgs);
+  };
+}
+```
+
+Example I:
+
+```
+var getPerson = partial(ajax, "http://some.api/person");
+
+// version 1
+var getCurrentUser = partial(ajax, "http://some.api/person", { user: CURRENT_USER_ID });
+
+// version 2
+var getCurrentUser = partial(getPerson, { user: CURRENT_USER_ID });
+```
+
+Example II:
+
+```
+function add(x, y) {
+  return x + y;
+}
+
+[1,2,3,4,5].map(function adder(val) {
+  return add(3, val);
+});      // [4,5,6,7,8]
+```
+
+## Reversing Arguments
+
+Recall that the signature for our Ajax function is: ajax( url, data, cb ). What if we wanted to partially apply the cb but wait to specify data and url later? We could create a utility that wraps a function to reverse its argument order:
+
+
+```
+function reverseArgs(fn) {
+  return function argsReversed(...args) { 
+    return fn(...args.reverse());
+  };
+}
+
+var cache = {};
+var cacheResult = reverseArgs(
+  partial(
+    reverseArgs(ajax),
+    function onResult(obj) {
+      cache[obj.id] = obj;
+    }
+  )
+);
+// later:
+cacheResult("http://some.api/person", { user: CURRENT_USER_ID });
+```
+
+## One at a Time
+
+Let’s examine a technique similar to partial application, where a function that expects multiple arguments is broken down into successive chained functions that each take a single argument (arity: 1) and return another function to accept the next argument. This technique is called currying.
+
+```
+function curry(fn, arity = fn.length) {
+  return (function nextCurried(prevArgs) {
+    return function curried(nextArg) {
+      var args = [...prevArgs, nextArg]; 
+      if (args.length >= arity) {
+        return fn(...args);
+      } else {
+        return nextCurried(args);
+      }
+    };
+  })([]);
+}
+
+[1,2,3,4,5].map(curry(add)(3));      // [4,5,6,7,8]
+```
+
 # Composing Functions
+
+Composition is how an FPer models the flow of data through the program. In some senses, it’s the most foundational concept in all of FP, because without it, you can’t declaratively model data and state changes. In other words, everything else in FP would collapse without composition.
 
 ## Output to Input
 
@@ -99,7 +317,15 @@ var wordsUsed = biggerWords( text );      // ["compose","functions","together","
 
 # Reducing Side Effects
 
+The FPer doesn’t eliminate all side effects. Rather, the goal is to limit them as much as possible. To do that, we first need to fully understand them.
+
+Pure functions are how we best avoid side effects. A pure function is one that always returns the same output given the same input, and has no side causes or side effects. Referential transparency further states that – more as a mental exercise than a literal action – a pure function’s call could be replaced with its output and the program would not have altered behavior.
+
+Refactoring an impure function to be pure is the preferred option. But if that’s not possible, try encapsulating the side causes/effects, or creating a pure interface against them.
+
 # Value Immutability
+
+ToDo
 
 # Closure vs. Object
 Objects and closures are isomorphic to each other, which means that they can be used somewhat interchangeably to represent state and behavior in your program.
@@ -271,6 +497,14 @@ sum(/*initialResult=*/0, 3, 1, 17, 94, 8);      // 123
 
 # List Operations
 
+ToDo
+
 # Functional Async
 
+For operations that will be proceed over time, all of these foundational FP principles can be applied time-independently. Exactly like promises model single future values, we can model eager lists of values instead as lazy Observable (event) streams of values that may come in one-at-a-time.
+A map(..) on an array runs its mapping function once for each value currently in the array, putting all the mapped values in the outcome array. A map(..) on an Observable runs its mapping function once for each value, whenever it comes in, and pushes all the mapped values to the output Observable.
+In other words, if an array is an eager data structure for FP operations, an Observable is its lazy-over-time counterpart.
+
 # Putting It All Together
+
+ToDo
